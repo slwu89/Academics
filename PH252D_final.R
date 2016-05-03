@@ -13,6 +13,7 @@ library(SuperLearner)
 library(doSNOW)
 library(snow)
 library(doParallel)
+library(tmle)
 
 #visualization
 library(ggplot2)
@@ -26,3 +27,157 @@ setwd("C:/Users/WuS/Dropbox/Academics/Spring 2016/PH252D/final_project/")
 setwd("C:/Users/ASRock Z87 Pro4/Dropbox/Academics/Spring 2016/PH252D/final_project/")
 data <- readRDS(file="data.no.outliers.RDS")
 data <- data[,c(5,4,1,2,3,6,7,8,9,10,11,12,13)]
+
+#SuperLearner library
+slLib <- c("SL.polymars","SL.glmnet","SL.gam","SL.glm","SL.step","SL.svm")
+
+
+#########################################
+###2 PART BOOTSTRAP PROCEDURE FOR TMLE###
+#########################################
+
+###Part 1: Estimate Q0 and g0###
+boot_partA <- function(data,slLib,verbose=TRUE){
+  
+  ###step 1 of TMLE algorthm: estimate E0(Y|A,W) by Qn(A,W)###
+  #prepare data
+  n <- nrow(data)
+  data$Y <- as.numeric(data$Y) #SL does not like integers
+  data$A <- as.numeric(data$A) #SL does not like integers
+  dat_a1 <- data ; dat_a1$A <- 1
+  dat_a0 <- data ; dat_a0$A <- 0
+  dat_countFact <- rbind(data,dat_a1,dat_a0) ; dat_countFact <- dat_countFact[,-1]
+  
+  #create initial estimate Qn_0 (untargeted estimator)
+  Qn_0 <- SuperLearner(Y=data$Y,X=data[,!names(data) %in% c("Y")],newX=dat_countFact[,!names(dat_countFact) %in% c("Y")],SL.library=slLib,family="gaussian",verbose=verbose,cvControl=list(V=10,shuffle=TRUE))
+  
+  #extract predictions from Qn_0 (untargeted estimator)
+  Qn_0_predA <- Qn_0$SL.predict[1:n] #predicted Y given observed covariates
+  Qn_0_pred1 <- Qn_0$SL.predict[(n+1):(2*n)] #counterfactual Y1
+  Qn_0_pred0 <- Qn_0$SL.predict[(2*n+1):(3*n)] #counterfactual Y0
+  
+  #evaluate simple substitution estimator
+  sub_est <- mean(Qn_0_pred1 - Qn_0_pred0)
+  
+  ####step 2 of TMLE algorithm: estimate P0(A|W) by Gn(A|W)###
+  #estimation
+  gn_hat <- SuperLearner(Y=data$A,X=data[,!names(data) %in% c("Y")],SL.library=slLib[grep("SL.glm.[1-9]",slLib,invert=TRUE)],family="binomial",verbose=verbose,cvControl=list(V=10,shuffle=TRUE))
+  gn_hat1 <- gn_hat$SL.predict #propensity scores
+  gn_hat0 <- (1 - gn_hat1) #propensity scores
+  
+  #get predicted probability of A given W for each subject
+  gn_hatAW <- rep(NA,n)
+  gn_hatAW[data$A==1] <- gn_hat1[data$A==1]
+  gn_hatAW[data$A==0] <- gn_hat0[data$A==0]
+  
+  #evaluate IPTW and stabilized IPTW estimator
+  iptw_est <- mean(as.numeric(data$A==1) * data$Y / gn_hatAW) - mean(as.numeric(data$A==0) * data$Y / gn_hatAW)
+  iptw_estStable <- mean(as.numeric(data$A==1) * data$Y / gn_hatAW)/mean(as.numeric(data$A==1) / gn_hatAW) - mean(as.numeric(data$A==0) * data$Y / gn_hatAW)/mean(as.numeric(data$A==1) / gn_hatAW)
+  
+  #return all output as list
+  results <- list(sub_est=sub_est,iptw_est=iptw_est,iptw_estStable=iptw_estStable,gAW=gn_hatAW,gn_hat1=gn_hat1,gn_hat0=gn_hat0,Qn_0_pred1=Qn_0_pred1,Qn_0_pred0=Qn_0_pred0,Qn_0_predA=Qn_0_predA)
+  return(results)
+}
+
+#Bootstrap B samples for Q0 and g0 estimates
+pkg_export <- c(sessionInfo()$basePkgs,names(sessionInfo()$otherPkgs))
+B <- 200
+
+cl <- makeCluster(spec=detectCores())
+registerDoParallel(cl)
+
+system.time(bootA_out <- foreach(i=1:B,.packages=pkg_export,.export=c("boot_partA","slLib","data"),.verbose=TRUE) %dopar% {
+  data_b <- data[sample(nrow(data),replace=TRUE),]
+  result <- boot_partA(data=data_b,slLib=slLib)
+  result$boot_b <- data_b #return the bootstrap data set
+  result
+})
+
+stopCluster(cl)
+rm(cl)
+
+saveRDS(object=bootA_out,file="bootA_out.rds")
+
+
+####Part 2: Estimate TMLE###
+readRDS(file="bootA_out.rds")
+boot_partB_index <- 1:length(bootA_out)
+
+bootB_out <- foreach(i=boot_partB_index,.verbose=TRUE) %do% {
+  if(sum(unlist(sapply(bootA_out[[i]],is.na)))>0){
+    return(NULL)
+  }
+  tmle(Y=bootA_out[[i]]$boot_b$Y,A=bootA_out[[i]]$boot_b$A,W=bootA_out[[i]]$boot_b[,3:13],Q=cbind(bootA_out[[i]]$Qn_0_pred0,bootA_out[[i]]$Qn_0_pred1),g1W=bootA_out[[i]]$gn_hat1,family="gaussian")
+}
+
+#remove bad samples & save data
+bootB_out <- bootB_out[!sapply(bootB_out,is.null)]
+saveRDS(object=bootB_out,file="bootB_out.rds")
+
+
+###################################
+###VISUALIZE AND EXTRACT RESULTS###
+###################################
+
+#extract data
+boot_iptw <- sapply(bootA_out,function(x) {x$iptw_est}) #IPTW estimator
+boot_iptwS <- sapply(bootA_out,function(x) {x$iptw_estStable}) #Stabilized IPTW estimator
+boot_sub <- sapply(bootA_out,function(x) {x$sub_est}) #Simple substitution estimator
+boot_gAW <- lapply(bootA_out,function(x) {x$gAW}) #Estimation of treatment mechanism (gAW)
+boot_wt <- lapply(bootA_out,function(x) {1/(x$gAW)}) #Weights
+boot_tmle <- sapply(bootB_out,function(x) {x$estimates$ATE$psi}) #TMLE estimator
+boot_tmleVar <- sapply(bootB_out,function(x) {x$estimates$ATE$var.psi}) #TMLE variance
+boot_tmleCI <- lapply(bootB_out,function(x) {x$estimates$ATE$CI}) #TMLE influence curve CI
+boot_epsilon <- lapply(bootB_out,function(x) {x$epsilon}) #epsilon
+
+#calculate clever covariate from bootA_out
+boot_g1w <- lapply(bootA_out,function(x) {x$gn_hat1})
+boot_g0w <- lapply(bootA_out,function(x) {x$gn_hat0})
+boot_hAW <- foreach(i=1:length(boot_partB_index),.verbose=TRUE) %do% {
+  ans <- as.numeric(data$A)/as.vector(boot_g1w[[i]]) - as.numeric(data$A)/as.vector(boot_g0w[[i]])
+  return(ans)
+}
+
+
+
+
+iptw_bootP <- ggplot() +
+  geom_histogram(data=as.data.frame(iptw_boot_iptw),aes(iptw_boot_iptw),fill="steelblue",colour="black",bins=20) +
+  geom_vline(xintercept=mean(iptw_boot_iptw),colour="tomato",lty=2,size=1.05) +
+  geom_vline(xintercept=median(iptw_boot_iptw),colour="tomato",lty=3,size=1.05) +
+  labs(x="IPTW Estimator (1000 Bootstrap Samples)",y="Count") +
+  theme_bw() +
+  theme(axis.title=element_text(size=12.5))
+
+stIptw_bootP <- ggplot() +
+  geom_histogram(data=as.data.frame(iptw_boot_stiptw),aes(iptw_boot_stiptw),fill="steelblue",colour="black",bins=20) +
+  geom_vline(xintercept=mean(iptw_boot_stiptw),colour="tomato",lty=2,size=1.05) +
+  geom_vline(xintercept=median(iptw_boot_stiptw),colour="tomato",lty=3,size=1.05) +
+  labs(x="Stabilized IPTW Estimator (1000 Bootstrap Samples)",y="Count") +
+  theme_bw() +
+  theme(axis.title=element_text(size=12.5))
+
+gaw_bootP <- ggplot() +
+  geom_histogram(data=melt(iptw_boot_gaw),aes(value,colour=as.factor(L1),group=L1,fill=as.factor(L1)),position="identity",alpha=0.5) +
+  labs(x="Predicted Probabilities (1000 Bootstrap Samples)",y="Count") +
+  guides(fill=FALSE,colour=FALSE) +
+  theme_bw() +
+  theme(axis.title=element_text(size=12.5))
+
+wt_bootP <- ggplot() +
+  geom_histogram(data=melt(iptw_boot_wt),aes(value,colour=as.factor(L1),group=L1,fill=as.factor(L1)),position="identity",alpha=0.5) +
+  labs(x="Weights (1000 Bootstrap Samples)",y="Count") +
+  guides(fill=FALSE,colour=FALSE) +
+  theme_bw() +
+  theme(axis.title=element_text(size=12.5))
+
+haw_bootP <- ggplot() +
+  geom_histogram(data=melt(iptw_boot_haw),aes(value,colour=as.factor(L1),group=L1,fill=as.factor(L1)),position="identity",alpha=0.5) +
+  labs(x="Clever Covariate (1000 Bootstrap Samples)",y="Count") +
+  guides(fill=FALSE,colour=FALSE) +
+  theme_bw() +
+  theme(axis.title=element_text(size=12.5))
+
+grid.arrange(iptw_bootP,stIptw_bootP,ncol=2)
+grid.arrange(gaw_bootP,wt_bootP,ncol=2)
+
