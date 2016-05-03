@@ -127,7 +127,7 @@ boot_gAW <- lapply(bootA_out,function(x) {x$gAW}) #Estimation of treatment mecha
 boot_wt <- lapply(bootA_out,function(x) {1/(x$gAW)}) #Weights
 boot_tmle <- sapply(bootB_out,function(x) {x$estimates$ATE$psi}) #TMLE estimator
 boot_tmleVar <- sapply(bootB_out,function(x) {x$estimates$ATE$var.psi}) #TMLE variance
-boot_tmleCI <- lapply(bootB_out,function(x) {x$estimates$ATE$CI}) #TMLE influence curve CI
+boot_tmleCI <- sapply(bootB_out,function(x) {x$estimates$ATE$CI}) #TMLE influence curve CI
 boot_epsilon <- lapply(bootB_out,function(x) {x$epsilon}) #epsilon
 
 #calculate clever covariate from bootA_out
@@ -138,46 +138,88 @@ boot_hAW <- foreach(i=1:length(boot_partB_index),.verbose=TRUE) %do% {
   return(ans)
 }
 
-
-
-
-iptw_bootP <- ggplot() +
-  geom_histogram(data=as.data.frame(iptw_boot_iptw),aes(iptw_boot_iptw),fill="steelblue",colour="black",bins=20) +
-  geom_vline(xintercept=mean(iptw_boot_iptw),colour="tomato",lty=2,size=1.05) +
-  geom_vline(xintercept=median(iptw_boot_iptw),colour="tomato",lty=3,size=1.05) +
-  labs(x="IPTW Estimator (1000 Bootstrap Samples)",y="Count") +
+#IPTW estimator
+plot_iptw <- ggplot() +
+  geom_histogram(data=as.data.frame(boot_iptw),aes(boot_iptw),fill="steelblue",colour="black",bins=20) +
+  geom_vline(xintercept=mean(boot_iptw,na.rm=TRUE),colour="tomato",lty=2,size=1.05) +
+  geom_vline(xintercept=median(boot_iptw,na.rm=TRUE),colour="tomato",lty=3,size=1.05) +
+  labs(x="IPTW Estimator (1000 Bootstrap Samples)") +
   theme_bw() +
-  theme(axis.title=element_text(size=12.5))
+  theme(axis.title=element_text(size=13),axis.title.y=element_blank())
 
-stIptw_bootP <- ggplot() +
-  geom_histogram(data=as.data.frame(iptw_boot_stiptw),aes(iptw_boot_stiptw),fill="steelblue",colour="black",bins=20) +
-  geom_vline(xintercept=mean(iptw_boot_stiptw),colour="tomato",lty=2,size=1.05) +
-  geom_vline(xintercept=median(iptw_boot_stiptw),colour="tomato",lty=3,size=1.05) +
-  labs(x="Stabilized IPTW Estimator (1000 Bootstrap Samples)",y="Count") +
+#Stabilized IPTW estimator
+plot_iptwS <- ggplot() +
+  geom_histogram(data=as.data.frame(boot_iptwS),aes(boot_iptwS),fill="steelblue",colour="black",bins=20) +
+  geom_vline(xintercept=mean(boot_iptwS,na.rm=TRUE),colour="tomato",lty=2,size=1.05) +
+  geom_vline(xintercept=median(boot_iptwS,na.rm=TRUE),colour="tomato",lty=3,size=1.05) +
+  labs(x="Stabilized IPTW Estimator (1000 Bootstrap Samples)") +
   theme_bw() +
-  theme(axis.title=element_text(size=12.5))
+  theme(axis.title=element_text(size=13),axis.title.y=element_blank())
 
-gaw_bootP <- ggplot() +
-  geom_histogram(data=melt(iptw_boot_gaw),aes(value,colour=as.factor(L1),group=L1,fill=as.factor(L1)),position="identity",alpha=0.5) +
-  labs(x="Predicted Probabilities (1000 Bootstrap Samples)",y="Count") +
+#Simple substitution estimator
+plot_sub <- ggplot() +
+  geom_histogram(data=as.data.frame(boot_sub),aes(boot_sub),fill="steelblue",colour="black",bins=20) +
+  geom_vline(xintercept=mean(boot_sub,na.rm=TRUE),colour="tomato",lty=2,size=1.05) +
+  geom_vline(xintercept=median(boot_sub,na.rm=TRUE),colour="tomato",lty=3,size=1.05) +
+  labs(x="Substitution Estimator (1000 Bootstrap Samples)") +
+  theme_bw() +
+  theme(axis.title=element_text(size=13),axis.title.y=element_blank())
+
+#Treatment mechanism estimator (gAW)
+plot_gAW <- ggplot() +
+  geom_histogram(data=melt(boot_gAW),aes(value,colour=as.factor(L1),group=L1,fill=as.factor(L1)),position="identity",alpha=0.5) +
+  labs(x="Predicted Probabilities (1000 Bootstrap Samples)") +
   guides(fill=FALSE,colour=FALSE) +
   theme_bw() +
-  theme(axis.title=element_text(size=12.5))
+  theme(axis.title=element_text(size=13),axis.title.y=element_blank())
 
-wt_bootP <- ggplot() +
-  geom_histogram(data=melt(iptw_boot_wt),aes(value,colour=as.factor(L1),group=L1,fill=as.factor(L1)),position="identity",alpha=0.5) +
-  labs(x="Weights (1000 Bootstrap Samples)",y="Count") +
+#IPTW weights
+plot_wt <- ggplot() +
+  geom_histogram(data=melt(boot_wt),aes(value,colour=as.factor(L1),group=L1,fill=as.factor(L1)),position="identity",alpha=0.5) +
+  labs(x="Weights (1000 Bootstrap Samples)") +
   guides(fill=FALSE,colour=FALSE) +
   theme_bw() +
-  theme(axis.title=element_text(size=12.5))
+  theme(axis.title=element_text(size=13),axis.title.y=element_blank())
 
-haw_bootP <- ggplot() +
-  geom_histogram(data=melt(iptw_boot_haw),aes(value,colour=as.factor(L1),group=L1,fill=as.factor(L1)),position="identity",alpha=0.5) +
-  labs(x="Clever Covariate (1000 Bootstrap Samples)",y="Count") +
+#clever covariate
+plot_hAW <- ggplot() +
+  geom_histogram(data=melt(boot_hAW),aes(value,colour=as.factor(L1),group=L1,fill=as.factor(L1)),position="identity",alpha=0.5) +
+  labs(x="Clever Covariate (1000 Bootstrap Samples)") +
   guides(fill=FALSE,colour=FALSE) +
   theme_bw() +
-  theme(axis.title=element_text(size=12.5))
+  theme(axis.title=element_text(size=13),axis.title.y=element_blank())
 
-grid.arrange(iptw_bootP,stIptw_bootP,ncol=2)
-grid.arrange(gaw_bootP,wt_bootP,ncol=2)
+grid.arrange(plot_iptw,plot_iptwS,plot_sub,ncol=2)
+grid.arrange(plot_gAW,plot_wt,plot_hAW,ncol=2)
 
+
+#TMLE estimator
+plot_tmle <- ggplot() +
+  geom_histogram(data=data.frame(boot_tmle),aes(boot_tmle),fill="steelblue",colour="black",bins=30) +
+  geom_vline(xintercept=mean(boot_tmle,na.rm=TRUE),colour="tomato",lty=2,size=1.05) +
+  geom_vline(xintercept=median(boot_tmle,na.rm=TRUE),colour="tomato",lty=3,size=1.05) +
+  labs(x="TMLE Estimator (1000 Bootstrap Samples)") +
+  theme_bw() +
+  theme(axis.title=element_text(size=13),axis.title.y=element_blank())
+
+#TMLE variance
+plot_tmleVar <- ggplot() +
+  geom_boxplot(data=data.frame(boot_tmleVar),aes(x=1,y=boot_tmleVar),fill="steelblue",width=.75) +
+  labs(x="Variance of TMLE Estimator") +
+  theme_bw() +
+  theme(axis.title=element_text(size=13),axis.title.y=element_blank()) +
+  coord_cartesian(xlim = c(0,2)) +
+  scale_x_continuous(breaks=NULL,minor_breaks=NULL,labels=NULL)
+
+#TMLE CI distribution
+plot_tmleCI <- ggplot() +
+  geom_boxplot(data=as.data.frame(t(boot_tmleCI)),aes(x=1,y=V1),fill="steelblue") +
+  geom_boxplot(data=as.data.frame(t(boot_tmleCI)),aes(x=2,y=V2),fill="tomato") +
+  labs(y="Distribution of 95% CI Lower and Upper Bounds") +
+  theme_bw() +
+  theme(axis.title=element_text(size=13),axis.title.y=element_blank()) +
+  scale_x_continuous(breaks=NULL,minor_breaks=NULL,labels=NULL) +
+  coord_flip()
+  
+
+grid.arrange(plot_tmle,plot_tmleVar,plot_tmleCI,ncol=3)
