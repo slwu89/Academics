@@ -20,7 +20,6 @@ library(ggplot2)
 library(gridExtra)
 library(reshape2)
 library(plyr)
-library(tmle)
 
 #data
 setwd("C:/Users/WuS/Dropbox/Academics/Spring 2016/PH252D/final_project/")
@@ -61,7 +60,7 @@ boot_partA <- function(data,slLib,verbose=TRUE){
   
   ####step 2 of TMLE algorithm: estimate P0(A|W) by Gn(A|W)###
   #estimation
-  gn_hat <- SuperLearner(Y=data$A,X=data[,!names(data) %in% c("Y")],SL.library=slLib[grep("SL.glm.[1-9]",slLib,invert=TRUE)],family="binomial",verbose=verbose,cvControl=list(V=10,shuffle=TRUE))
+  gn_hat <- SuperLearner(Y=data$A,X=data[,!names(data) %in% c("Y","A")],SL.library=slLib[grep("SL.glm.[1-9]",slLib,invert=TRUE)],family="binomial",verbose=verbose,cvControl=list(V=10,shuffle=TRUE))
   gn_hat1 <- gn_hat$SL.predict #propensity scores
   gn_hat0 <- (1 - gn_hat1) #propensity scores
   
@@ -110,8 +109,9 @@ bootB_out <- foreach(i=boot_partB_index,.verbose=TRUE) %do% {
   tmle(Y=bootA_out[[i]]$boot_b$Y,A=bootA_out[[i]]$boot_b$A,W=bootA_out[[i]]$boot_b[,3:13],Q=cbind(bootA_out[[i]]$Qn_0_pred0,bootA_out[[i]]$Qn_0_pred1),g1W=bootA_out[[i]]$gn_hat1,family="gaussian")
 }
 
-#remove bad samples & save data
+#remove bad samples
 bootB_out <- bootB_out[!sapply(bootB_out,is.null)]
+
 saveRDS(object=bootB_out,file="bootB_out.rds")
 
 
@@ -220,6 +220,8 @@ plot_tmleCI <- ggplot() +
   theme(axis.title=element_text(size=13),axis.title.y=element_blank()) +
   scale_x_continuous(breaks=NULL,minor_breaks=NULL,labels=NULL) +
   coord_flip()
-  
+
+#TMLE epsilon convergence
+boot_epsilon
 
 grid.arrange(plot_tmle,plot_tmleVar,plot_tmleCI,ncol=3)
