@@ -211,7 +211,7 @@ plot_tmle <- ggplot() +
 
 #TMLE variance
 plot_tmleVar <- ggplot() +
-  geom_boxplot(data=data.frame(boot_tmleVar),aes(x=1,y=boot_tmleVar),fill="steelblue",width=.75) +
+  geom_boxplot(data=data.frame(boot_tmleVar),aes(x=1,y=boot_tmleVar),fill="steelblue",width=0.5) +
   labs(x="Variance of TMLE Estimator") +
   theme_bw() +
   theme(axis.title=element_text(size=13),axis.title.y=element_blank()) +
