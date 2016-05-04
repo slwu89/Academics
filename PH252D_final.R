@@ -22,11 +22,14 @@ library(gridExtra)
 library(reshape2)
 library(plyr)
 
-#data
+#data (set working directory to where 'data.no.outliers.RDS' is)
 setwd("C:/Users/WuS/Dropbox/Academics/Spring 2016/PH252D/final_project/")
 setwd("C:/Users/ASRock Z87 Pro4/Dropbox/Academics/Spring 2016/PH252D/final_project/")
+
+#load data and resort columns for TMLE package
 data <- readRDS(file="data.no.outliers.RDS")
-data <- data[,c(5,4,1,2,3,6,7,8,9,10,11,12,13)]
+data_index <- c("Y","A","sex","age","v02","age_sq","age_cos","age_sin","age_log","v02_sq","v02_cos","v02_sin","v02_log")
+data <- data[,match(data_index,names(data))]
 
 #SuperLearner library
 slLib <- c("SL.polymars","SL.glmnet","SL.gam","SL.glm","SL.step","SL.svm")
