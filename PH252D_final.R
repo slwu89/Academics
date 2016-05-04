@@ -7,7 +7,7 @@
 ###DATA & LIBRARIES###
 ######################
 
-#analysis
+#analysis (please load these packages to run 2 part bootstrap procedure)
 library(parallel)
 library(SuperLearner)
 library(doSNOW)
@@ -15,7 +15,8 @@ library(snow)
 library(doParallel)
 library(tmle)
 
-#visualization
+#visualization (please wait until after running part 1 and 2 of bootstrap process to load these packages,
+#exporting them to the parallel cluster will slow down bootstrapping loop considerably)
 library(ggplot2)
 library(gridExtra)
 library(reshape2)
