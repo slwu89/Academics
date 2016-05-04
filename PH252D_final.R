@@ -128,7 +128,11 @@ boot_wt <- lapply(bootA_out,function(x) {1/(x$gAW)}) #Weights
 boot_tmle <- sapply(bootB_out,function(x) {x$estimates$ATE$psi}) #TMLE estimator
 boot_tmleVar <- sapply(bootB_out,function(x) {x$estimates$ATE$var.psi}) #TMLE variance
 boot_tmleCI <- sapply(bootB_out,function(x) {x$estimates$ATE$CI}) #TMLE influence curve CI
-boot_epsilon <- lapply(bootB_out,function(x) {x$epsilon}) #epsilon
+boot_tmleCI <- as.data.frame(t(boot_tmleCI))
+boot_epsilon <- sapply(bootB_out,function(x) {x$epsilon}) #epsilon
+boot_epsilon <- as.data.frame(t(boot_epsilon))
+boot_epsilon <- melt(boot_epsilon)
+boot_epsilon$sample <- c(1:(nrow(boot_epsilon)/2),1:(nrow(boot_epsilon)/2))
 
 #calculate clever covariate from bootA_out
 boot_g1w <- lapply(bootA_out,function(x) {x$gn_hat1})
@@ -189,9 +193,8 @@ plot_hAW <- ggplot() +
   theme_bw() +
   theme(axis.title=element_text(size=13),axis.title.y=element_blank())
 
-grid.arrange(plot_iptw,plot_iptwS,plot_sub,ncol=2)
-grid.arrange(plot_gAW,plot_wt,plot_hAW,ncol=2)
-
+grid.arrange(plot_iptw,plot_iptwS,plot_sub,ncol=3)
+grid.arrange(plot_gAW,plot_wt,plot_hAW,ncol=3)
 
 #TMLE estimator
 plot_tmle <- ggplot() +
@@ -213,8 +216,8 @@ plot_tmleVar <- ggplot() +
 
 #TMLE CI distribution
 plot_tmleCI <- ggplot() +
-  geom_boxplot(data=as.data.frame(t(boot_tmleCI)),aes(x=1,y=V1),fill="steelblue") +
-  geom_boxplot(data=as.data.frame(t(boot_tmleCI)),aes(x=2,y=V2),fill="tomato") +
+  geom_boxplot(data=boot_tmleCI,aes(x=1,y=V1),fill="steelblue") +
+  geom_boxplot(data=boot_tmleCI,aes(x=2,y=V2),fill="tomato") +
   labs(y="Distribution of 95% CI Lower and Upper Bounds") +
   theme_bw() +
   theme(axis.title=element_text(size=13),axis.title.y=element_blank()) +
@@ -222,6 +225,12 @@ plot_tmleCI <- ggplot() +
   coord_flip()
 
 #TMLE epsilon convergence
-boot_epsilon
+plot_epsilon <- ggplot(data=boot_epsilon) +
+  geom_point(aes(x=variable,y=value,colour=as.factor(sample)),alpha=0.5) +
+  geom_line(aes(x=variable,y=value,group=sample,colour=as.factor(sample)),alpha=0.5) +
+  guides(colour=FALSE) +
+  labs(y="Epsilon") +
+  theme_bw() +
+  theme(axis.title=element_text(size=13),axis.text=element_text(size=13),axis.title.x=element_blank())
 
-grid.arrange(plot_tmle,plot_tmleVar,plot_tmleCI,ncol=3)
+grid.arrange(plot_tmle,plot_tmleVar,plot_tmleCI,plot_epsilon,ncol=2)
