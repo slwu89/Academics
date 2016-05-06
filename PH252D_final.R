@@ -218,7 +218,7 @@ plot_tmle <- ggplot() +
 
 #TMLE variance
 plot_tmleVar <- ggplot() +
-  geom_boxplot(data=data.frame(boot_tmleVar),aes(x=1,y=boot_tmleVar),fill="steelblue",width=0.5) +
+  geom_boxplot(data=data.frame(boot_tmleVar),aes(x=1,y=boot_tmleVar),fill="steelblue",width=0.70) +
   labs(x="Variance of TMLE Estimator (log scale)") +
   theme_bw() +
   theme(axis.title=element_text(size=13),axis.title.y=element_blank()) +
@@ -228,8 +228,8 @@ plot_tmleVar <- ggplot() +
 
 #TMLE CI distribution
 plot_tmleCI <- ggplot() +
-  geom_boxplot(data=boot_tmleCI,aes(x=1,y=V1),fill="steelblue") +
-  geom_boxplot(data=boot_tmleCI,aes(x=2,y=V2),fill="tomato") +
+  geom_boxplot(data=boot_tmleCI,aes(x=1,y=V1),fill="steelblue",width=0.75) +
+  geom_boxplot(data=boot_tmleCI,aes(x=2,y=V2),fill="tomato",width=0.75) +
   labs(y="Distribution of 95% CI Lower and Upper Bounds (log scale)") +
   theme_bw() +
   theme(axis.title=element_text(size=13),axis.title.y=element_blank()) +
@@ -248,3 +248,46 @@ plot_epsilon <- ggplot(data=boot_epsilon) +
   scale_y_log10()
 
 grid.arrange(plot_tmle,plot_tmleVar,plot_tmleCI,plot_epsilon,ncol=2)
+
+#EDA Plots
+data_raw <- read.csv("dat.csv")
+
+#LOESS regression Y on A
+eda_1 <- ggplot(data=data_raw) +
+  geom_point(aes(x=daily_mod.vigPA.min.,y=WMHvolume.voxels.)) +
+  geom_smooth(method="loess",aes(x=daily_mod.vigPA.min.,y=WMHvolume.voxels.),colour="steelblue") +
+  labs(x="Daily Moderate/Vigorous Physical Activity",y="White Matter Leison Volume (log scale)") +
+  theme_bw() +
+  theme(axis.title=element_text(size=13),axis.text=element_text(size=13)) +
+  scale_y_log10()
+  
+#Boxplots
+eda_2 <- ggplot(data=melt(data[,c("A","Y")],id.vars="A"),aes(as.factor(A),value,group=as.factor(A),fill=as.factor(A))) +
+  geom_boxplot() +
+  scale_fill_manual(values=c("tomato","steelblue")) +
+  guides(fill=FALSE) +
+  labs(x="A",y="") +
+  theme_bw() +
+  theme(axis.title=element_text(size=13),axis.text=element_text(size=13),axis.title.y=element_blank()) +
+  scale_y_log10()
+  
+grid.arrange(eda_1,eda_2,ncol=2)
+
+#summary statistics of all estimators
+#IPTW
+mean(boot_iptw,na.rm=T) + (1.96 * sd(boot_iptw,na.rm=T))
+mean(boot_iptw,na.rm=T) - (1.96 * sd(boot_iptw,na.rm=T))
+quantile(boot_iptw,probs=c(.025,.975),na.rm=T)
+
+#Stabilized IPTW
+mean(boot_iptwS,na.rm=T) + (1.96 * sd(boot_iptwS,na.rm=T))
+mean(boot_iptwS,na.rm=T) - (1.96 * sd(boot_iptwS,na.rm=T))
+quantile(boot_iptwS,probs=c(.025,.975),na.rm=T)
+
+#Simple Substitution Estimator
+mean(boot_sub,na.rm=T) + (1.96 * sd(boot_sub,na.rm=T))
+mean(boot_sub,na.rm=T) - (1.96 * sd(boot_sub,na.rm=T))
+quantile(boot_sub,probs=c(.025,.975),na.rm=T)
+
+#TMLE estimator
+quantile(boot_tmle,probs=c(.025,.975),na.rm=T)
